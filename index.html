@@ -356,19 +356,34 @@ function buildColumnMap(headerRow){
     dimanche: findColIndex(H, ["dimanche"]),
   };
 
-  // Confirmed against real data: several header cells in this sheet are genuinely
-  // blank (not a parsing bug — verified by decoding an actual data row), so text
-  // search can never find them. These fixed positions are the verified fallback,
-  // only applied when text search comes up empty AND the row is wide enough that
-  // the position is plausible (guards against applying this to an unrelated sheet).
+  // Google's gviz CSV export blanks the header TEXT for several columns in this
+  // sheet (confirmed: the underlying cells aren't empty, gviz just drops the label
+  // for them) — so text search can never find those. Rather than hardcode absolute
+  // positions (which broke the moment a column got added/removed elsewhere in the
+  // sheet — e.g. a duplicate "Project" column got deleted and shifted everything
+  // after it by one), anchor the blank ones RELATIVE to "Material", which is a
+  // stable, always-labeled column that sits right before them in a fixed pattern:
+  // ... TOOL CAV, CT(s), Planning, Nber of plt, Material, Daily objectif, %OEE,
+  // Anticipation wk38, Lundi, Mardi, Mercredi, jeudi, Vendredi, Samedi, Dimanche.
+  // This survives future edits anywhere BEFORE "Material" without needing a manual fix.
+  const materialIdx = findColIndex(H, ["material"]);
+  if(materialIdx !== -1){
+    const RELATIVE = { ct: -3, dailyObj: 1, oee: 2, lundi: 4, mardi: 5, mercredi: 6, jeudi: 7, vendredi: 8, samedi: 9, dimanche: 10 };
+    for(const [field, offset] of Object.entries(RELATIVE)){
+      if(M[field] === -1) M[field] = materialIdx + offset;
+    }
+  }
+
+  // Last-resort absolute fallback, only for fields the Material anchor didn't cover
+  // (i.e. "Material" itself wasn't found) or the earlier text search already fixed.
   const FALLBACK_POSITIONS = {
     area:0, pnImm:1, project:5, status:7, prio:8, comment:9,
     attain:10, plannedQty:13, producedQty:14, remainingQty:15,
-    ct:22, dailyObj:26, oee:27,
-    lundi:29, mardi:30, mercredi:31, jeudi:32, vendredi:33, samedi:34, dimanche:35
+    ct:21, dailyObj:25, oee:26,
+    lundi:28, mardi:29, mercredi:30, jeudi:31, vendredi:32, samedi:33, dimanche:34
   };
   const usedFallback = [];
-  if(H.length >= 36){
+  if(H.length >= 35){
     for(const [field, pos] of Object.entries(FALLBACK_POSITIONS)){
       if(M[field] === -1){
         M[field] = pos;
@@ -384,7 +399,10 @@ const CRITICAL_FIELDS = ["plannedQty","producedQty","remainingQty","attain","oee
 
 /* ---------------- parsing helpers ---------------- */
 function csvUrl(sheetName){
-  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+  // Cache-bust: Google's gviz endpoint can serve a stale cached response for a
+  // few minutes even with no-store on our own fetch — a changing query param
+  // forces a fresh copy instead of a cached one.
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}&_=${Date.now()}`;
 }
 function parseNum(v){
   if(v === null || v === undefined) return null;
@@ -683,11 +701,9 @@ function renderKPIs(rows){
   const behind80 = started.filter(r=>r.attain!==null && r.attain<80 && !["done","canceled","cancelled"].includes((r.status||"").toLowerCase())).length;
   const stoppedCanceled = rows.filter(r=>["stopped","canceled","cancelled"].includes((r.status||"").toLowerCase())).length;
 
-  // OEE: only from started lines, and sanity-capped — a stray data-entry error
-  // (e.g. a raw piece count typed into the %OEE cell) shouldn't be able to send
-  // the average into the thousands. Anything outside 0-150% is treated as bad data.
-  const oeeVals = started.map(r=>r.oee).filter(v=>v!==null && v>=0 && v<=150);
-  const oeeExcluded = started.filter(r=>r.oee!==null && (r.oee<0 || r.oee>150)).length;
+  // OEE is a per-line figure already sitting in the sheet — just average whatever's
+  // there for the rows currently shown, no extra filtering or range-capping.
+  const oeeVals = rows.map(r=>r.oee).filter(v=>v!==null);
   const avgOee = oeeVals.length ? oeeVals.reduce((a,b)=>a+b,0)/oeeVals.length : null;
 
   const kpis = [
@@ -695,7 +711,7 @@ function renderKPIs(rows){
     ["Planned Qty (k)", planned.toFixed(1), ""],
     ["Produced Qty (k)", produced.toFixed(1), ""],
     ["Remaining Qty (k)", remaining.toFixed(1), ""],
-    ["Avg OEE" + (oeeExcluded ? ` (${oeeExcluded} excl.)` : ""), avgOee!==null ? avgOee.toFixed(0)+"%" : "—", avgOee>=85?"good":avgOee>=70?"warn":"bad"],
+    ["Avg OEE", avgOee!==null ? avgOee.toFixed(0)+"%" : "—", avgOee>=85?"good":avgOee>=70?"warn":"bad"],
     ["Lines Behind 80%", behind80, behind80>0?"warn":"good"],
     ["Stopped / Canceled", stoppedCanceled, stoppedCanceled>0?"bad":"good"],
     ["Lines Shown", rows.length, ""],
