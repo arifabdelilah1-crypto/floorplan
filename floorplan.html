@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>CI Floor Plan — Molding &amp; Assy</title>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#162033; --border:#2d3b52;
+    --text:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8;
+    --green:#22c55e; --blue:#3b82f6; --gray:#64748b; --red:#ef4444; --orange:#f59e0b; --purple:#a78bfa;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);}
+
+  #loginScreen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px;}
+  #loginBox{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:32px 28px;width:100%;max-width:340px;text-align:center;}
+  #loginBox h2{margin:0 0 6px;font-size:18px;}
+  #loginBox p{color:var(--muted);font-size:12.5px;margin:0 0 18px;}
+  #loginBox input{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:11px 12px;font-size:15px;margin-bottom:10px;}
+  #loginBox button{width:100%;background:var(--accent);color:#04263d;font-weight:700;border:none;border-radius:8px;padding:11px;font-size:14px;cursor:pointer;}
+  #loginErr{color:var(--red);font-size:12.5px;min-height:16px;margin-top:8px;}
+  #app{display:none;}
+
+  header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--bg);z-index:10;}
+  header h1{font-size:18px;margin:0;font-weight:600;}
+  header .sub{color:var(--muted);font-size:11.5px;margin-top:2px;}
+  .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  select,button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;}
+  button.primary{background:var(--accent);color:#04263d;font-weight:600;border:none;}
+  #status{font-size:11.5px;color:var(--muted);}
+
+  main{padding:18px 20px 60px;max-width:1400px;margin:0 auto;}
+  .banner{background:#3b2f0f;border:1px solid #7c5e12;color:#fcd34d;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:13px;}
+
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px;font-size:12px;color:var(--muted);}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .sw{width:11px;height:11px;border-radius:3px;display:inline-block;}
+
+  .floorRow{margin-bottom:26px;}
+  .floorRow h2{font-size:13.5px;margin:0 0 10px;color:var(--text);display:flex;align-items:center;gap:8px;}
+  .floorRow h2 .count{color:var(--muted);font-weight:400;}
+  .machines{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:10px;}
+  .machine{border-radius:10px;padding:10px 8px;text-align:center;cursor:pointer;border:2px solid transparent;transition:transform .1s;user-select:none;}
+  .machine:hover{transform:translateY(-2px);}
+  .machine.selected{border-color:#fff;}
+  .machine .id{font-weight:700;font-size:13px;}
+  .machine .lines{font-size:10.5px;opacity:.85;margin-top:2px;}
+  .machine .attain{font-size:15px;font-weight:700;margin-top:4px;}
+
+  .st-done{background:#14532d;color:#4ade80;}
+  .st-ongoing{background:#1e3a5f;color:#60a5fa;}
+  .st-stopped{background:#450a0a;color:#f87171;}
+  .st-unfinished{background:#422006;color:#fbbf24;}
+  .st-canceled{background:#3f2d1e;color:#fb923c;}
+  .st-planned{background:#3f3f46;color:#d4d4d8;}
+  .st-notstarted{background:#312e81;color:#a5b4fc;}
+  .st-empty{background:#1e293b;color:#475569;border-style:dashed;border-color:#334155;}
+
+  #detailPanel{position:fixed;top:0;right:0;bottom:0;width:360px;max-width:92vw;background:var(--panel);border-left:1px solid var(--border);transform:translateX(100%);transition:transform .2s;z-index:50;overflow-y:auto;padding:18px;}
+  #detailPanel.open{transform:translateX(0);}
+  #detailPanel h3{margin:0 0 4px;font-size:16px;}
+  #detailPanel .sub{color:var(--muted);font-size:12px;margin-bottom:14px;}
+  #detailPanel .lineCard{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12.5px;}
+  #detailPanel .lineCard .pn{font-weight:700;margin-bottom:3px;}
+  #detailPanel .lineCard .row{display:flex;justify-content:space-between;color:var(--muted);margin-top:2px;}
+  #detailPanel .closeBtn{position:absolute;top:14px;right:14px;background:transparent;border:none;color:var(--muted);font-size:20px;cursor:pointer;}
+  .badge{padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:600;white-space:nowrap;}
+
+  @media(max-width:700px){
+    header{padding:12px 14px;}
+    main{padding:14px 14px 50px;}
+    .machines{grid-template-columns:repeat(auto-fill,minmax(90px,1fr));}
+  }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div id="loginBox">
+    <h2>🔒 CI Floor Plan</h2>
+    <p>Enter the access password.</p>
+    <input type="password" id="pwInput" placeholder="Password" autocomplete="current-password">
+    <button class="primary" id="pwBtn">Unlock</button>
+    <div id="loginErr"></div>
+  </div>
+</div>
+
+<div id="app">
+<header>
+  <div>
+    <h1>CI Floor Plan — Molding &amp; Assy</h1>
+    <div class="sub"><span id="lastUpdated">not loaded yet</span></div>
+  </div>
+  <div class="controls">
+    <select id="weekSelect"></select>
+    <button class="primary" id="refreshBtn">⟳ Refresh</button>
+    <button id="logoutBtn">Log out</button>
+    <span id="status"></span>
+  </div>
+</header>
+
+<main>
+  <div class="banner" id="banner" style="display:none;"></div>
+
+  <div class="legend">
+    <span><span class="sw" style="background:#22c55e;"></span> Done</span>
+    <span><span class="sw" style="background:#3b82f6;"></span> Ongoing</span>
+    <span><span class="sw" style="background:#ef4444;"></span> Stopped</span>
+    <span><span class="sw" style="background:#f59e0b;"></span> Unfinished</span>
+    <span><span class="sw" style="background:#fb923c;"></span> Canceled</span>
+    <span><span class="sw" style="background:#71717a;"></span> Planned</span>
+    <span><span class="sw" style="background:#6366f1;"></span> Not started</span>
+    <span>Tile shows the worst-priority status among that machine's lines this week, plus its average attainment.</span>
+  </div>
+
+  <div id="floorPlan"></div>
+</main>
+</div>
+
+<div id="detailPanel">
+  <button class="closeBtn" id="detailClose">✕</button>
+  <div id="detailContent"></div>
+</div>
+
+<script>
+/* ======================= CONFIG ======================= */
+const SHEET_ID = "1X22404pVovt1IVolZHzq0aQ5D2KbFzZAD0M-NUpvs3Q";
+const WEEK_TABS = ["Wk38", "Wk39"];
+const AUTO_REFRESH_MS = 5 * 60 * 1000;
+const PASSWORD_HASH = "e2553f7162f15417c9a52ee1e4465bac12bcda0a2354dd92e911f2e5df1104e4";
+
+// Floor rows, in display order. Machines are auto-sorted into these by machineType.
+const FLOOR_ROWS = [
+  { key: "10x",  label: "Molding — IMM1xx (10x)" },
+  { key: "30x",  label: "Molding — IMM3xx (30x)" },
+  { key: "50x",  label: "Molding — IMM5xx (50x)" },
+  { key: "Assy", label: "Assembly" },
+  { key: "Other",label: "Other / unclassified" },
+];
+/* ======================================================= */
+
+let weeksData = {};
+let currentWeek = null;
+
+async function sha256(str){
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,"0")).join("");
+}
+async function tryLogin(){
+  const hash = await sha256(document.getElementById("pwInput").value);
+  if(hash === PASSWORD_HASH){
+    sessionStorage.setItem("ci_floor_auth", "1");
+    showApp();
+  } else {
+    document.getElementById("loginErr").textContent = "Wrong password.";
+  }
+}
+function showApp(){
+  document.getElementById("loginScreen").style.display = "none";
+  document.getElementById("app").style.display = "block";
+  loadAll();
+  setInterval(loadAll, AUTO_REFRESH_MS);
+}
+document.getElementById("pwBtn").addEventListener("click", tryLogin);
+document.getElementById("pwInput").addEventListener("keydown", e => { if(e.key === "Enter") tryLogin(); });
+document.getElementById("logoutBtn").addEventListener("click", () => { sessionStorage.removeItem("ci_floor_auth"); location.reload(); });
+if(sessionStorage.getItem("ci_floor_auth") === "1") showApp();
+
+/* ---------------- column mapping (same logic as the main dashboard) ---------------- */
+function normHeader(s){ return (s||"").toString().toLowerCase().replace(/\s+/g," ").trim(); }
+function findColIndex(H, needles){
+  for(const n of needles){ const i = H.findIndex(h => h.includes(n)); if(i !== -1) return i; }
+  return -1;
+}
+function buildColumnMap(headerRow){
+  const H = (headerRow || []).map(normHeader);
+  const M = {
+    area: findColIndex(H, ["area"]),
+    pnImm: findColIndex(H, ["pn / imm", "pn/imm", "pn imm"]),
+    project: findColIndex(H, ["project"]),
+    status: findColIndex(H, ["status"]),
+    prio: findColIndex(H, ["prio"]),
+    comment: findColIndex(H, ["comment"]),
+    attain: findColIndex(H, ["weekly attain", "attain %", "attain"]),
+    plannedQty: findColIndex(H, ["planned quan", "planned qty", "planned quantity", "planned"]),
+    producedQty: findColIndex(H, ["cummul produced", "cummul", "produced quan", "produced qty", "produced quantity", "produced"]),
+    remainingQty: findColIndex(H, ["remaining quan", "remaining qty", "remaining quantity"]),
+    ct: findColIndex(H, ["ct (s)", "ct(s)", "ct(s )", "ct "]) !== -1
+      ? findColIndex(H, ["ct (s)", "ct(s)", "ct(s )", "ct "])
+      : H.findIndex(h => h === "ct" || /^ct\b/.test(h)),
+    dailyObj: findColIndex(H, ["daily objectif", "daily obj", "objectif"]),
+    oee: findColIndex(H, ["%oee", "oee"]),
+  };
+  // Verified fixed fallback positions for this sheet layout — used only when the
+  // header cell itself is blank (confirmed against real data, see chat history).
+  const FALLBACK_POSITIONS = { area:0, pnImm:1, project:5, status:7, prio:8, comment:9,
+    attain:10, plannedQty:13, producedQty:14, remainingQty:15, ct:22, dailyObj:26, oee:27 };
+  if(H.length >= 30){
+    for(const [f,p] of Object.entries(FALLBACK_POSITIONS)) if(M[f] === -1) M[f] = p;
+  }
+  return M;
+}
+function parseNum(v){
+  if(v === null || v === undefined) return null;
+  let s = String(v).trim();
+  if(s === "" || s === "#N/A" || s === "-") return null;
+  s = s.replace(/\s/g,"").replace(/%/g,"");
+  if(/^-?\d+,\d+$/.test(s)) s = s.replace(",", ".");
+  else s = s.replace(/,/g, "");
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+function parseMachine(pn){
+  const idx = pn.lastIndexOf(" - ");
+  return idx === -1 ? "" : pn.slice(idx + 3).trim();
+}
+function machineTypeOf(machine){
+  if(!machine) return "Other";
+  if(/^assy/i.test(machine)) return "Assy";
+  const m = machine.match(/^imm\s*([0-9])/i);
+  if(m) return m[1] + "0x";
+  return "Other";
+}
+function csvUrl(sheetName){
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+}
+
+async function fetchWeek(sheetName){
+  const res = await fetch(csvUrl(sheetName), {cache:"no-store"});
+  if(!res.ok) throw new Error(`HTTP ${res.status} loading "${sheetName}"`);
+  const text = await res.text();
+  if(text.trim().startsWith("<")) throw new Error(`"${sheetName}" tab not readable — check sharing settings`);
+  const rows = Papa.parse(text, {skipEmptyLines:false, delimiter:",", quoteChar:'"', escapeChar:'"'}).data;
+  const M = buildColumnMap(rows[0]);
+  if(M.pnImm === -1) throw new Error(`Couldn't find a "PN / IMM" column in "${sheetName}"`);
+
+  const out = [];
+  let lastArea = "";
+  for(let i = 1; i < rows.length; i++){
+    const r = rows[i];
+    if(!r || r.length < 2) continue;
+    const pn = (r[M.pnImm] || "").trim();
+    if(!pn) continue;
+    const area = M.area !== -1 ? (r[M.area] || "").trim() : "";
+    if(area) lastArea = area;
+    const machine = parseMachine(pn);
+
+    out.push({
+      area: lastArea || "—", pn, machine, machineType: machineTypeOf(machine),
+      project: M.project !== -1 ? (r[M.project] || "").trim() : "",
+      status: M.status !== -1 ? ((r[M.status] || "").trim() || "—") : "—",
+      prio: M.prio !== -1 ? (r[M.prio] || "") : "",
+      comment: M.comment !== -1 ? (r[M.comment] || "").trim() : "",
+      attain: M.attain !== -1 ? parseNum(r[M.attain]) : null,
+      planned: M.plannedQty !== -1 ? parseNum(r[M.plannedQty]) : null,
+      produced: M.producedQty !== -1 ? parseNum(r[M.producedQty]) : null,
+      ct: M.ct !== -1 ? parseNum(r[M.ct]) : null,
+      oee: M.oee !== -1 ? parseNum(r[M.oee]) : null,
+    });
+  }
+  return out;
+}
+
+/* ---------------- status priority for aggregating a machine's tile color ---------------- */
+const STATUS_PRIORITY = { stopped:1, unfinished:2, ongoing:3, notstarted:4, planned:5, canceled:6, done:7 };
+function statusKey(status){ return (status||"").toLowerCase().replace(/\s+/g,""); }
+function statusClass(status){
+  const s = statusKey(status);
+  if(["done","ongoing","stopped","unfinished","canceled","cancelled","planned","notstarted"].includes(s))
+    return "st-" + (s === "cancelled" ? "canceled" : s);
+  return "st-planned";
+}
+
+async function loadAll(){
+  setStatus("Loading…","");
+  try{
+    const results = await Promise.all(WEEK_TABS.map(w => fetchWeek(w).then(rows => [w, rows])));
+    weeksData = Object.fromEntries(results);
+    if(!currentWeek || !weeksData[currentWeek]) currentWeek = WEEK_TABS[WEEK_TABS.length-1];
+    populateWeekSelect();
+    render();
+    setStatus("Updated " + new Date().toLocaleTimeString(), "ok");
+    document.getElementById("lastUpdated").textContent = "updated " + new Date().toLocaleTimeString();
+  }catch(err){
+    console.error(err);
+    setStatus("Fetch failed", "err");
+    showBanner("Couldn't load live data: " + err.message + ". Check sharing settings and tab names.");
+  }
+}
+function setStatus(msg,cls){ const el=document.getElementById("status"); el.textContent=msg; el.style.color = cls==="err" ? "#ef4444" : cls==="ok" ? "#22c55e" : "#94a3b8"; }
+function showBanner(msg){ const b=document.getElementById("banner"); b.textContent=msg; b.style.display="block"; }
+function populateWeekSelect(){
+  const sel = document.getElementById("weekSelect");
+  const cur = sel.value;
+  sel.innerHTML = WEEK_TABS.map(w => `<option value="${w}">${w}</option>`).join("");
+  sel.value = WEEK_TABS.includes(cur) ? cur : currentWeek;
+}
+document.getElementById("weekSelect").addEventListener("change", e => { currentWeek = e.target.value; render(); });
+document.getElementById("refreshBtn").addEventListener("click", loadAll);
+
+function render(){
+  const rows = weeksData[currentWeek];
+  if(!rows) return;
+  document.getElementById("banner").style.display = "none";
+
+  // group lines by machine
+  const byMachine = {};
+  for(const r of rows){
+    if(!r.machine) continue;
+    if(!byMachine[r.machine]) byMachine[r.machine] = { machine:r.machine, machineType:r.machineType, lines:[] };
+    byMachine[r.machine].lines.push(r);
+  }
+
+  const rowsHtml = FLOOR_ROWS.map(fr => {
+    const machines = Object.values(byMachine).filter(m => m.machineType === fr.key)
+      .sort((a,b) => a.machine.localeCompare(b.machine, undefined, {numeric:true}));
+    if(!machines.length) return "";
+    const tiles = machines.map(m => {
+      const worst = [...m.lines].sort((a,b) => (STATUS_PRIORITY[statusKey(a.status)]||9) - (STATUS_PRIORITY[statusKey(b.status)]||9))[0];
+      const attainVals = m.lines.map(l=>l.attain).filter(v=>v!==null);
+      const avgAttain = attainVals.length ? attainVals.reduce((a,b)=>a+b,0)/attainVals.length : null;
+      return `<div class="machine ${statusClass(worst.status)}" data-machine="${m.machine}">
+        <div class="id">${m.machine}</div>
+        <div class="lines">${m.lines.length} line${m.lines.length===1?"":"s"}</div>
+        <div class="attain">${avgAttain!==null ? avgAttain.toFixed(0)+"%" : "—"}</div>
+      </div>`;
+    }).join("");
+    return `<div class="floorRow"><h2>${fr.label} <span class="count">(${machines.length} machines)</span></h2>
+      <div class="machines">${tiles}</div></div>`;
+  }).join("");
+
+  document.getElementById("floorPlan").innerHTML = rowsHtml || `<p style="color:var(--muted);">No machines found for ${currentWeek}.</p>`;
+
+  document.querySelectorAll(".machine").forEach(el => {
+    el.addEventListener("click", () => openDetail(el.dataset.machine, byMachine[el.dataset.machine]));
+  });
+}
+
+function openDetail(machineId, data){
+  document.querySelectorAll(".machine").forEach(el => el.classList.toggle("selected", el.dataset.machine === machineId));
+  const panel = document.getElementById("detailPanel");
+  const lines = data.lines.map(l => `<div class="lineCard">
+    <div class="pn">${l.pn}</div>
+    <div>${l.project || "—"} <span class="badge ${statusClass(l.status)}" style="margin-left:6px;">${l.status}</span></div>
+    <div class="row"><span>Attain</span><span>${l.attain!==null?l.attain.toFixed(0)+"%":"—"}</span></div>
+    <div class="row"><span>Planned / Produced</span><span>${l.planned??"—"} / ${l.produced??"—"}</span></div>
+    <div class="row"><span>CT(s)</span><span>${l.ct??"—"}</span></div>
+    <div class="row"><span>OEE</span><span>${l.oee!==null?l.oee.toFixed(0)+"%":"—"}</span></div>
+    ${l.comment ? `<div class="row" style="color:#f59e0b;">${l.comment}</div>` : ""}
+  </div>`).join("");
+  document.getElementById("detailContent").innerHTML = `
+    <h3>${machineId}</h3>
+    <div class="sub">${data.lines.length} line${data.lines.length===1?"":"s"} this week · ${currentWeek}</div>
+    ${lines}`;
+  panel.classList.add("open");
+}
+document.getElementById("detailClose").addEventListener("click", () => {
+  document.getElementById("detailPanel").classList.remove("open");
+  document.querySelectorAll(".machine").forEach(el => el.classList.remove("selected"));
+});
+</script>
+</body>
+</html>
