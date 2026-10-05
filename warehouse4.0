@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Warehouse Dashboard 4.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: control-room grid — KPI strip, 3D floor + inspector, trends, then action lists for the gemba walk */
+:root{
+  --bg:#eef1f4; --panel:#ffffff; --panel-2:#f5f7f9; --line:#d9dfe5; --fg:#17212b; --muted:#5b6876;
+  --accent:#e08a00; --accent-soft:#fdf0d9;
+  --cool:#4f86c6; --ok:#2f9e6b; --warn:#d99a1e; --crit:#d1493f; --empty:#c9d1d9;
+  --scene:#e4e8ec; --floor:#d3d9df;
+  --f-display:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-data:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11161c; --panel:#18202a; --panel-2:#1d2631; --line:#2b3542; --fg:#e6ebf0; --muted:#94a2b1;
+  --accent:#f5a524; --accent-soft:#3a2c12;
+  --cool:#6a9fdc; --ok:#3fbf86; --warn:#e9b03c; --crit:#ec6a5f; --empty:#3a4553;
+  --scene:#141b23; --floor:#1f2832; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11161c; --panel:#18202a; --panel-2:#1d2631; --line:#2b3542; --fg:#e6ebf0; --muted:#94a2b1;
+  --accent:#f5a524; --accent-soft:#3a2c12;
+  --cool:#6a9fdc; --ok:#3fbf86; --warn:#e9b03c; --crit:#ec6a5f; --empty:#3a4553;
+  --scene:#141b23; --floor:#1f2832; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.45}
+.wrap{max-width:1320px;margin:0 auto;padding-inline:16px;padding-block:18px 40px;display:grid;gap:16px}
+header{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px;border-bottom:2px solid var(--fg);padding-bottom:12px}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(26px,4vw,38px);line-height:1;margin:0;letter-spacing:.2px;text-wrap:balance}
+h1 span{color:var(--accent)}
+.sub{color:var(--muted);margin:6px 0 0;font-size:14px}
+.meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-family:var(--f-data);font-size:12px;color:var(--muted)}
+.chip{border:1px solid var(--line);border-radius:999px;padding:3px 10px;background:var(--panel)}
+.chip.sample{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+h2{font-family:var(--f-display);font-weight:600;font-size:15px;text-transform:uppercase;letter-spacing:1.2px;margin:0;color:var(--muted)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px;min-width:0;display:grid;gap:12px;align-content:start}
+.ph{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.num{font-variant-numeric:tabular-nums;font-family:var(--f-data)}
+
+/* KPI strip */
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.kpi{background:var(--panel);padding:12px 14px;display:grid;gap:4px;min-width:0}
+.kpi .lbl{font-size:12px;text-transform:uppercase;letter-spacing:.9px;color:var(--muted)}
+.kpi .val{font-family:var(--f-display);font-weight:700;font-size:30px;line-height:1.05}
+.kpi .val small{font-size:15px;font-weight:600;color:var(--muted);margin-left:3px}
+.kpi .note{font-size:12.5px;color:var(--muted)}
+.kpi .note b{font-weight:600}
+.up{color:var(--ok)} .down{color:var(--crit)}
+@media (max-width:900px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi:last-child{grid-column:1/-1}}
+
+/* 3D */
+.main{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px}
+@media (max-width:900px){.main{grid-template-columns:1fr}}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.seg button{font:500 13px var(--f-body);background:var(--panel-2);color:var(--fg);border:0;padding:6px 11px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--panel)}
+.seg button:focus-visible,.btn:focus-visible,tr:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.scene{position:relative;width:100%;aspect-ratio:16/9;min-height:300px;max-width:100%;border-radius:4px;overflow:hidden;background:var(--scene)}
+.scene canvas{display:block;width:100%!important;height:100%!important;cursor:grab}
+.hint{position:absolute;left:10px;bottom:8px;font-size:12px;color:var(--muted);background:var(--panel);padding:3px 8px;border-radius:4px;border:1px solid var(--line)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12.5px;color:var(--muted)}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.zones{display:grid;gap:8px}
+.zone{display:grid;grid-template-columns:28px 1fr auto;gap:8px;align-items:center;font-size:13.5px}
+.zone .tag{font-family:var(--f-display);font-weight:700;background:var(--panel-2);border:1px solid var(--line);border-radius:4px;text-align:center;padding:2px 0}
+.bar{height:6px;background:var(--panel-2);border-radius:3px;overflow:hidden;grid-column:2/4}
+.bar>div{height:100%}
+.inspect{border-top:1px solid var(--line);padding-top:12px;display:grid;gap:6px;font-size:13.5px}
+.inspect dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0}
+.inspect dt{color:var(--muted)} .inspect dd{margin:0;text-align:right}
+.loc{font-family:var(--f-data);font-weight:600;font-size:18px}
+
+/* Trends */
+.trends{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px}
+@media (max-width:900px){.trends{grid-template-columns:1fr}}
+svg text{fill:var(--muted);font-family:var(--f-data);font-size:10.5px}
+.scroll{overflow-x:auto}
+.heat{display:grid;gap:2px;min-width:420px}
+.heat div{aspect-ratio:1.4;border-radius:2px;font:10.5px var(--f-data);color:var(--muted);display:flex;align-items:center;justify-content:center}
+.insight{font-size:13.5px;background:var(--panel-2);border-left:3px solid var(--accent);padding:8px 10px;border-radius:0 4px 4px 0}
+
+/* Tables & actions */
+.bottom{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px}
+@media (max-width:900px){.bottom{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse;font-size:13.5px;min-width:560px}
+th{font-weight:600;text-align:left;color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.8px;border-bottom:1px solid var(--line);padding:6px 8px}
+td{border-bottom:1px solid var(--line);padding:7px 8px}
+td.r,th.r{text-align:right}
+tr.click{cursor:pointer} tr.click:hover td{background:var(--panel-2)}
+.pill{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.p-crit{background:color-mix(in srgb,var(--crit) 16%,transparent);color:var(--crit)}
+.p-warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.p-ok{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
+.dos{display:inline-block;width:56px;height:6px;background:var(--panel-2);border-radius:3px;margin-right:6px;vertical-align:middle;overflow:hidden}
+.dos>i{display:block;height:100%}
+ol.actions{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+ol.actions li{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;padding:10px;border:1px solid var(--line);border-radius:5px;background:var(--panel-2)}
+ol.actions input{width:18px;height:18px;margin-top:2px;accent-color:var(--accent)}
+ol.actions li.done{opacity:.55} ol.actions li.done .t{text-decoration:line-through}
+.t{font-weight:600} .d{font-size:13px;color:var(--muted)}
+.owner{font-family:var(--f-data);font-size:11.5px;color:var(--accent)}
+footer{font-size:12.5px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Warehouse <span>4.0</span></h1>
+      <p class="sub">Molding &amp; Assembly stores · visibility for the daily gemba walk</p>
+    </div>
+    <div class="meta">
+      <span class="chip sample">Sample data</span>
+      <span class="chip" id="stamp"></span>
+      <span class="chip">192 locations · 4 zones</span>
+    </div>
+  </header>
+
+  <section class="kpis" aria-label="Core performance metrics">
+    <div class="kpi"><span class="lbl">Inventory value</span><span class="val num" id="kVal"></span><span class="note" id="kValN"></span></div>
+    <div class="kpi"><span class="lbl">Turnover (annualised)</span><span class="val num" id="kTurn"></span><span class="note">Target ≥ 12 turns</span></div>
+    <div class="kpi"><span class="lbl">Days of supply</span><span class="val num" id="kDos"></span><span class="note">Weighted by value</span></div>
+    <div class="kpi"><span class="lbl">Space utilisation</span><span class="val num" id="kUtil"></span><span class="note" id="kUtilN"></span></div>
+    <div class="kpi"><span class="lbl">Reorder status</span><span class="val num" id="kRe"></span><span class="note" id="kReN"></span></div>
+  </section>
+
+  <section class="main">
+    <div class="panel">
+      <div class="ph">
+        <h2>3D warehouse</h2>
+        <div class="seg" role="group" aria-label="Colour locations by">
+          <button id="m-fill" aria-pressed="true">Fill %</button>
+          <button id="m-abc" aria-pressed="false">ABC class</button>
+          <button id="m-idle" aria-pressed="false">Days idle</button>
+        </div>
+      </div>
+      <div class="scene" id="scene"><span class="hint">Drag to rotate · scroll to zoom · tap a bin</span></div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <aside class="panel">
+      <h2>Capacity by zone</h2>
+      <div class="zones" id="zones"></div>
+      <div class="inspect" id="inspect">
+        <span class="d">Select a bin in the 3D view to see what is stored there.</span>
+      </div>
+    </aside>
+  </section>
+
+  <section class="trends">
+    <div class="panel">
+      <div class="ph"><h2>Movements · last 14 days</h2>
+        <div class="legend"><span><i style="background:var(--cool)"></i>Inbound pallets</span><span><i style="background:var(--accent)"></i>Outbound pallets</span></div></div>
+      <div class="scroll"><svg id="flow" viewBox="0 0 640 230" style="width:100%;min-width:480px;height:auto" role="img" aria-label="Daily inbound and outbound pallet movements"></svg></div>
+      <div class="insight" id="flowIns"></div>
+    </div>
+    <div class="panel">
+      <div class="ph"><h2>Picks by hour</h2><span class="d">Avg last 4 weeks</span></div>
+      <div class="scroll"><div class="heat" id="heat"></div></div>
+      <div class="insight" id="heatIns"></div>
+    </div>
+  </section>
+
+  <section class="bottom">
+    <div class="panel">
+      <div class="ph"><h2>Reorder status</h2><span class="d">Sorted by urgency · click a row to locate it</span></div>
+      <div class="scroll"><table>
+        <thead><tr><th>Part</th><th>Zone</th><th class="r">On hand</th><th>Days of supply</th><th class="r">Value</th><th>Status</th></tr></thead>
+        <tbody id="reorder"></tbody>
+      </table></div>
+    </div>
+    <div class="panel">
+      <div class="ph"><h2>Gemba focus today</h2><span class="d" id="doneCount"></span></div>
+      <ol class="actions" id="actions"></ol>
+    </div>
+  </section>
+
+  <footer>Figures are generated examples for a molding plant (resins, inserts, WIP, finished connectors and e-box brackets). Swap in your WMS or Excel export to make them live.</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function rng(s){return function(){s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const R=rng(20261005);
+const fmt=n=>Math.round(n).toLocaleString('fr-FR');
+const MAD=n=>n>=1e6?(n/1e6).toFixed(2).replace('.',',')+' M':fmt(n/1e3)+' k';
+
+/* ---------- master data ---------- */
+const ZONES=[
+ {id:'A',name:'Raw material (resin)'},
+ {id:'B',name:'Components & inserts'},
+ {id:'C',name:'WIP / molded parts'},
+ {id:'D',name:'Finished goods'}];
+const SKUS=[
+ ['A','PA66 GF30 black resin','kg',38,820,9000,14],
+ ['A','PBT GF30 natural resin','kg',42,640,6500,14],
+ ['A','PP-T20 grey resin','kg',19,300,3800,10],
+ ['A','PA6 GF15 resin','kg',35,210,2600,21],
+ ['A','Masterbatch black','kg',61,25,260,21],
+ ['A','TPE seal compound','kg',88,40,520,28],
+ ['B','Tin-plated terminal 0.64','pcs',0.42,52000,600000,30],
+ ['B','Brass insert M5','pcs',0.95,9000,110000,25],
+ ['B','Brass insert M6','pcs',1.10,7000,60000,25],
+ ['B','Silicone mat seal','pcs',0.65,14000,150000,20],
+ ['B','Fuse holder clip','pcs',0.31,18000,240000,18],
+ ['B','Shipping carton 600x400','pcs',6.5,450,4200,7],
+ ['C','Connector housing 12-way','pcs',1.8,16000,120000,3],
+ ['C','Connector housing 24-way','pcs',2.6,11000,70000,3],
+ ['C','E-box lower shell','pcs',9.5,2600,18000,3],
+ ['C','E-box cover','pcs',7.2,2600,30000,3],
+ ['C','Bracket insert-molded','pcs',4.1,5200,26000,3],
+ ['C','TPA lock','pcs',0.22,30000,90000,3],
+ ['D','E-box assembly LH','pcs',58,950,7800,2],
+ ['D','E-box assembly RH','pcs',58,900,4200,2],
+ ['D','Connector 12-way assy','pcs',4.9,9000,70000,2],
+ ['D','Connector 24-way assy','pcs',7.8,6500,30000,2],
+ ['D','Bracket kit','pcs',12.5,1400,16000,2],
+ ['D','Service spares','pcs',21,40,2600,5],
+].map((r,i)=>{
+  const [zone,name,uom,cost,daily,onHand0,lead]=r;
+  const safety=Math.round(daily*Math.max(1,lead*0.35));
+  const rop=daily*lead*0.6+safety;
+  let onHand=Math.round(onHand0*(0.75+R()*0.5));
+  const code=`${zone}${String(i+1).padStart(3,'0')}-${['L','K','M','F'][ZONES.findIndex(z=>z.id===zone)]}`;
+  const dos=onHand/daily, value=onHand*cost;
+  const status=onHand<=rop?'crit':onHand<=rop*1.25?'warn':'ok';
+  return {code,zone,name,uom,cost,daily,onHand,lead,rop,dos,value,status};
+});
+// ABC by annual consumption value
+const byUse=[...SKUS].sort((a,b)=>b.daily*b.cost-a.daily*a.cost);
+const totUse=byUse.reduce((s,x)=>s+x.daily*x.cost,0);let cum=0;
+byUse.forEach(s=>{cum+=s.daily*s.cost;s.abc=cum/totUse<=.7?'A':cum/totUse<=.9?'B':'C'});
+
+/* ---------- locations ---------- */
+const ROWS=2,BAYS=6,LEVELS=4,LOCS=[];
+ZONES.forEach((z,zi)=>{
+  const items=SKUS.filter(s=>s.zone===z.id);
+  const bias=[.78,.62,.9,.7][zi];
+  for(let r=0;r<ROWS;r++)for(let b=0;b<BAYS;b++)for(let l=0;l<LEVELS;l++){
+    const empty=R()>bias+0.12;
+    const sku=empty?null:items[Math.floor(R()*items.length)];
+    let fill=empty?0:Math.min(100,Math.round(35+R()*70));
+    let idle=empty?0:Math.round(sku.abc==='C'?R()*75:R()*20);
+    LOCS.push({id:`${z.id}${r+1}-${String(b+1).padStart(2,'0')}-${l+1}`,zone:z.id,zi,r,b,l,sku,fill,idle});
+  }
+});
+
+/* ---------- KPIs ---------- */
+const totalVal=SKUS.reduce((s,x)=>s+x.value,0);
+const annualCogs=SKUS.reduce((s,x)=>s+x.daily*x.cost*300,0);
+const turns=annualCogs/totalVal;
+const wDos=SKUS.reduce((s,x)=>s+x.dos*x.value,0)/totalVal;
+const used=LOCS.filter(l=>l.sku);
+const util=LOCS.reduce((s,l)=>s+l.fill,0)/LOCS.length;
+const crit=SKUS.filter(s=>s.status==='crit'),warn=SKUS.filter(s=>s.status==='warn');
+document.getElementById('stamp').textContent='Snapshot '+new Date().toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short'})+' · 06:00';
+document.getElementById('kVal').innerHTML=MAD(totalVal)+'<small>MAD</small>';
+document.getElementById('kValN').innerHTML='<b class="down">▲ 4,2 %</b> vs last week';
+document.getElementById('kTurn').innerHTML=turns.toFixed(1).replace('.',',')+'<small>×</small>';
+document.getElementById('kDos').innerHTML=wDos.toFixed(1).replace('.',',')+'<small>days</small>';
+document.getElementById('kUtil').innerHTML=Math.round(util)+'<small>%</small>';
+document.getElementById('kUtilN').textContent=`${used.length}/${LOCS.length} locations occupied`;
+document.getElementById('kRe').innerHTML=`<span class="down">${crit.length}</span><small>to order</small>`;
+document.getElementById('kReN').innerHTML=`<b style="color:var(--warn)">${warn.length}</b> on watch · ${SKUS.length-crit.length-warn.length} OK`;
+
+/* ---------- zone bars ---------- */
+const zoneUtil=ZONES.map((z,i)=>{const ls=LOCS.filter(l=>l.zi===i);return Math.round(ls.reduce((s,l)=>s+l.fill,0)/ls.length)});
+const utilColor=p=>p>=90?'var(--crit)':p>=75?'var(--warn)':p>=40?'var(--ok)':'var(--cool)';
+document.getElementById('zones').innerHTML=ZONES.map((z,i)=>`<div class="zone"><span class="tag">${z.id}</span><span>${z.name}</span><span class="num">${zoneUtil[i]}%</span><div class="bar"><div style="width:${zoneUtil[i]}%;background:${utilColor(zoneUtil[i])}"></div></div></div>`).join('');
+
+/* ---------- 3D ---------- */
+const host=document.getElementById('scene');
+let mode='fill',selected=null,meshes=[];
+const LEG={
+ fill:[['--cool','< 40 %'],['--ok','40–75 %'],['--warn','75–90 %'],['--crit','≥ 90 %'],['--empty','Empty']],
+ abc:[['--crit','A · top 70 % of usage'],['--warn','B · next 20 %'],['--cool','C · slow movers'],['--empty','Empty']],
+ idle:[['--ok','< 7 days'],['--warn','7–30 days'],['--crit','> 30 days (dead stock risk)'],['--empty','Empty']]};
+function colorVar(l){
+  if(!l.sku)return'--empty';
+  if(mode==='fill')return l.fill>=90?'--crit':l.fill>=75?'--warn':l.fill>=40?'--ok':'--cool';
+  if(mode==='abc')return{A:'--crit',B:'--warn',C:'--cool'}[l.sku.abc];
+  return l.idle>30?'--crit':l.idle>=7?'--warn':'--ok';
+}
+function drawLegend(){document.getElementById('legend').innerHTML=LEG[mode].map(([v,t])=>`<span><i style="background:var(${v})"></i>${t}</span>`).join('')}
+
+let renderer,scene,camera,controls,floor,frames=[],ray=new THREE.Raycaster(),mouse=new THREE.Vector2();
+function build3D(){
+  renderer=new THREE.WebGLRenderer({antialias:true});
+  renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1));
+  host.prepend(renderer.domElement);
+  scene=new THREE.Scene();
+  camera=new THREE.PerspectiveCamera(42,16/9,0.1,500);
+  camera.position.set(30,26,34);
+  controls=new THREE.OrbitControls(camera,renderer.domElement);
+  controls.target.set(0,2,0);controls.enableDamping=true;controls.maxPolarAngle=Math.PI/2.15;controls.minDistance=12;controls.maxDistance=90;
+  scene.add(new THREE.HemisphereLight(0xffffff,0x667788,0.85));
+  const dl=new THREE.DirectionalLight(0xffffff,0.55);dl.position.set(20,40,15);scene.add(dl);
+  floor=new THREE.Mesh(new THREE.PlaneGeometry(64,44),new THREE.MeshLambertMaterial());
+  floor.rotation.x=-Math.PI/2;scene.add(floor);
+  // aisle markings
+  const lineMat=new THREE.MeshBasicMaterial({color:0xe0a020});
+  [-11,11].forEach(z=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(60,0.18),lineMat);m.rotation.x=-Math.PI/2;m.position.set(0,0.02,z);scene.add(m)});
+  const frameMat=new THREE.MeshLambertMaterial({color:0x2f5d8a});
+  const binGeo=new THREE.BoxGeometry(1.7,1,1.1);
+  const W=2,H=1.35,D=1.3;
+  ZONES.forEach((z,zi)=>{
+    const ox=(zi%2===0?-1:1)*14, oz=(zi<2?-1:1)*8;
+    for(let r=0;r<ROWS;r++){
+      const rz=oz+(r===0?-1.8:1.8);
+      // uprights + beams
+      for(let b=0;b<=BAYS;b++){const p=new THREE.Mesh(new THREE.BoxGeometry(.12,LEVELS*H+.2,.12),frameMat);p.position.set(ox+(b-BAYS/2)*W,(LEVELS*H)/2,rz);scene.add(p);frames.push(p)}
+      for(let l=0;l<=LEVELS;l++){const be=new THREE.Mesh(new THREE.BoxGeometry(BAYS*W,.08,.08),new THREE.MeshLambertMaterial({color:0xe07a00}));be.position.set(ox,l*H,rz-D/2+.05);scene.add(be)}
+    }
+    // zone label sprite
+    const c=document.createElement('canvas');c.width=128;c.height=128;const g=c.getContext('2d');
+    g.fillStyle='#e08a00';g.beginPath();g.arc(64,64,58,0,7);g.fill();g.fillStyle='#fff';g.font='bold 72px sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(z.id,64,68);
+    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c)}));sp.scale.set(2.2,2.2,1);sp.position.set(ox-BAYS*W/2-1.6,LEVELS*H+.8,oz);scene.add(sp);
+  });
+  LOCS.forEach(l=>{
+    const ox=(l.zi%2===0?-1:1)*14, oz=(l.zi<2?-1:1)*8, rz=oz+(l.r===0?-1.8:1.8);
+    const h=l.sku?Math.max(.25,l.fill/100):1;
+    const m=new THREE.Mesh(binGeo,new THREE.MeshLambertMaterial({transparent:true}));
+    m.scale.y=h*1.0;
+    m.position.set(ox+(l.b-BAYS/2+.5)*W,l.l*H+.06+(h*1.0)/2,rz);
+    m.userData=l;l.mesh=m;scene.add(m);meshes.push(m);
+  });
+  paint();resize();
+  new ResizeObserver(resize).observe(host);
+  renderer.domElement.addEventListener('pointerdown',e=>{host._d={x:e.clientX,y:e.clientY}});
+  renderer.domElement.addEventListener('pointerup',e=>{
+    const d=host._d;if(!d||Math.hypot(e.clientX-d.x,e.clientY-d.y)>6)return;
+    const rc=renderer.domElement.getBoundingClientRect();
+    mouse.set(((e.clientX-rc.left)/rc.width)*2-1,-((e.clientY-rc.top)/rc.height)*2+1);
+    ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(meshes)[0];
+    if(hit)select(hit.object.userData);
+  });
+  (function loop(){controls.update();renderer.render(scene,camera);requestAnimationFrame(loop)})();
+}
+function resize(){const w=host.clientWidth,h=host.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
+function paint(){
+  if(!scene)return;
+  scene.background=new THREE.Color(css('--scene'));
+  floor.material.color.set(css('--floor'));
+  meshes.forEach(m=>{const l=m.userData,v=colorVar(l);
+    m.material.color.set(css(v));
+    const dim=selected&&selected.sku&&l.sku!==selected.sku&&l!==selected;
+    m.material.opacity=!l.sku?.18:dim?.25:1;
+    m.material.emissive.set(l===selected?0x553300:0x000000);
+  });
+}
+function select(l){
+  selected=l;paint();
+  const el=document.getElementById('inspect');
+  if(!l.sku){el.innerHTML=`<span class="loc">${l.id}</span><span class="d">Empty location · available for put-away.</span>`;return}
+  const s=l.sku, n=LOCS.filter(x=>x.sku===s).length;
+  el.innerHTML=`<span class="loc">${l.id}</span>
+  <strong>${s.name}</strong><span class="d num">${s.code} · class ${s.abc}</span>
+  <dl class="num"><dt>Bin fill</dt><dd>${l.fill} %</dd><dt>Last movement</dt><dd>${l.idle} days ago</dd>
+  <dt>Total on hand</dt><dd>${fmt(s.onHand)} ${s.uom}</dd><dt>Days of supply</dt><dd>${s.dos.toFixed(1).replace('.',',')}</dd>
+  <dt>Stored in</dt><dd>${n} location${n>1?'s':''}</dd><dt>Status</dt><dd>${pill(s.status)}</dd></dl>
+  <span class="d">Other bins of this part stay highlighted in the 3D view.</span>`;
+}
+function setMode(m){mode=m;['fill','abc','idle'].forEach(k=>document.getElementById('m-'+k).setAttribute('aria-pressed',k===m));drawLegend();paint()}
+['fill','abc','idle'].forEach(k=>document.getElementById('m-'+k).addEventListener('click',()=>setMode(k)));
+drawLegend();
+if(window.THREE&&THREE.OrbitControls){try{build3D()}catch(e){host.insertAdjacentHTML('afterbegin','<p class="d" style="padding:16px">3D view needs WebGL, which this device has turned off.</p>')}}
+new MutationObserver(paint).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{paint();drawFlow();drawHeat()});
+
+/* ---------- movements chart ---------- */
+const days=[...Array(14)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-13+i);return d});
+const FLOW=days.map(d=>{const sun=d.getDay()===0;return{d,inb:sun?0:Math.round(38+R()*30),out:sun?0:Math.round(44+R()*26)}});
+FLOW[9].out=88;FLOW[10].inb=74;
+function drawFlow(){
+  const svg=document.getElementById('flow'),W=640,H=230,L=34,B=196,T=14,max=100,sx=(W-L-8)/14,y=v=>B-(v/max)*(B-T);
+  let s='';
+  [0,25,50,75,100].forEach(v=>{s+=`<line x1="${L}" x2="${W-8}" y1="${y(v)}" y2="${y(v)}" stroke="${css('--line')}"/><text x="${L-6}" y="${y(v)+3.5}" text-anchor="end">${v}</text>`});
+  FLOW.forEach((f,i)=>{const x=L+i*sx+sx*.16,bw=sx*.32;
+    s+=`<rect x="${x}" y="${y(f.inb)}" width="${bw}" height="${B-y(f.inb)}" fill="${css('--cool')}" rx="1.5"><title>${f.inb} in</title></rect>`;
+    s+=`<rect x="${x+bw+2}" y="${y(f.out)}" width="${bw}" height="${B-y(f.out)}" fill="${css('--accent')}" rx="1.5"><title>${f.out} out</title></rect>`;
+    s+=`<text x="${L+i*sx+sx/2}" y="${B+14}" text-anchor="middle">${f.d.toLocaleDateString('en-GB',{weekday:'narrow'})}${f.d.getDate()}</text>`;});
+  // capacity line: dock handles ~80 pallets/day
+  s+=`<line x1="${L}" x2="${W-8}" y1="${y(80)}" y2="${y(80)}" stroke="${css('--crit')}" stroke-dasharray="4 4"/><text x="${W-10}" y="${y(80)-5}" text-anchor="end" style="fill:${css('--crit')}">Dock capacity 80/day</text>`;
+  svg.innerHTML=s;
+}
+drawFlow();
+const net=FLOW.reduce((s,f)=>s+f.inb-f.out,0);
+document.getElementById('flowIns').innerHTML=`Net flow <b class="num">${net>0?'+':''}${net}</b> pallets over 14 days. Outbound peaked at <b class="num">${FLOW[9].out}</b> on ${FLOW[9].d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric'})}, above dock capacity: check whether shipments can be levelled across the week.`;
+
+/* ---------- heatmap ---------- */
+const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat'],HRS=[6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21];
+const HEAT=DAYS.map((d,di)=>HRS.map(h=>{let v=12+R()*10;if(h===6||h===14)v+=26;if(h===7||h===15)v+=14;if(h===13||h===21)v-=6;if(di===5)v*=.55;if(di===0&&h===6)v+=12;return Math.max(2,Math.round(v))}));
+function drawHeat(){
+  const el=document.getElementById('heat');el.style.gridTemplateColumns=`36px repeat(${HRS.length},1fr)`;
+  const mx=Math.max(...HEAT.flat());let s='<div></div>'+HRS.map(h=>`<div>${h}</div>`).join('');
+  HEAT.forEach((row,i)=>{s+=`<div style="justify-content:flex-start">${DAYS[i]}</div>`+row.map((v,j)=>`<div title="${DAYS[i]} ${HRS[j]}:00 · ${v} picks" style="background:color-mix(in srgb,var(--accent) ${Math.round(v/mx*100)}%,var(--panel-2))"></div>`).join('')});
+  el.innerHTML=s;
+}
+drawHeat();
+document.getElementById('heatIns').innerHTML='Picks bunch in the first hour of each shift (06:00 and 14:00), about 2× the hourly average. Pre-staging line-feed kits during the last hour of the previous shift would flatten the peak.';
+
+/* ---------- reorder table ---------- */
+function pill(s){return{crit:'<span class="pill p-crit">Reorder now</span>',warn:'<span class="pill p-warn">Watch</span>',ok:'<span class="pill p-ok">OK</span>'}[s]}
+const order={crit:0,warn:1,ok:2};
+const sorted=[...SKUS].sort((a,b)=>order[a.status]-order[b.status]||a.dos-b.dos);
+document.getElementById('reorder').innerHTML=sorted.map((s,i)=>{const pct=Math.min(100,s.dos/(s.lead*1.5)*100);
+ return`<tr class="click" tabindex="0" data-i="${SKUS.indexOf(s)}"><td><strong>${s.name}</strong><br><span class="d num">${s.code}</span></td><td>${s.zone}</td><td class="r num">${fmt(s.onHand)} ${s.uom}</td>
+ <td class="num"><span class="dos"><i style="width:${pct}%;background:var(--${s.status==='crit'?'crit':s.status==='warn'?'warn':'ok'})"></i></span>${s.dos.toFixed(1).replace('.',',')} d</td><td class="r num">${MAD(s.value)}</td><td>${pill(s.status)}</td></tr>`}).join('');
+document.getElementById('reorder').addEventListener('click',e=>{const tr=e.target.closest('tr');if(!tr)return;locate(SKUS[tr.dataset.i])});
+document.getElementById('reorder').addEventListener('keydown',e=>{if(e.key==='Enter'){const tr=e.target.closest('tr');if(tr)locate(SKUS[tr.dataset.i])}});
+function locate(s){const l=LOCS.find(x=>x.sku===s);if(l){select(l);host.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'center'})}
+ else{document.getElementById('inspect').innerHTML=`<strong>${s.name}</strong><span class="d">No stock in any rack location: ${fmt(s.onHand)} ${s.uom} sit in floor storage or the receiving area.</span>`}}
+
+/* ---------- gemba actions ---------- */
+const hotZone=zoneUtil.indexOf(Math.max(...zoneUtil));
+const dead=LOCS.filter(l=>l.sku&&l.idle>30);
+const deadVal=dead.reduce((s,l)=>s+l.sku.cost*l.sku.onHand/LOCS.filter(x=>x.sku===l.sku).length,0);
+const lowFill=LOCS.filter(l=>l.sku&&l.fill<40);
+const ACTS=[
+ [`Release orders for ${crit.length} parts below reorder point`,`${crit.slice(0,3).map(s=>s.name).join(', ')}${crit.length>3?'…':''}`,'Logistics · today'],
+ [`Zone ${ZONES[hotZone].id} at ${zoneUtil[hotZone]} % capacity`,`${ZONES[hotZone].name}: confirm overflow area and next 3 days of inbound before it blocks the aisle.`,'Warehouse lead'],
+ [`Review ${dead.length} bins idle for more than 30 days`,`About ${MAD(deadVal)} MAD tied up. Decide: keep, relocate to upper levels, or scrap/return.`,'CI + Planning'],
+ [`Consolidate ${lowFill.length} bins under 40 % fill`,`Merging partial pallets of the same part frees space without new racking.`,'Warehouse lead'],
+ ['Level the shift-start picking peak','Trial pre-staged line-feed kits on Line 2 this week and compare the 06:00 pick count.','CI · this week'],
+];
+const ul=document.getElementById('actions');
+ul.innerHTML=ACTS.map((a,i)=>`<li><input type="checkbox" id="act${i}" aria-labelledby="actt${i}"><div><div class="t" id="actt${i}">${a[0]}</div><div class="d">${a[1]}</div><div class="owner">${a[2]}</div></div></li>`).join('');
+function count(){const c=ul.querySelectorAll('input:checked').length;document.getElementById('doneCount').textContent=`${c}/${ACTS.length} closed`}
+ul.addEventListener('change',e=>{e.target.closest('li').classList.toggle('done',e.target.checked);count()});count();
+})();
+</script>
+</body>
+</html>
