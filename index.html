@@ -128,6 +128,34 @@
   #detailPanel .lineCard .pn{font-weight:700;margin-bottom:3px;}
   #detailPanel .lineCard .row{display:flex;justify-content:space-between;color:var(--muted);margin-top:2px;}
   #detailPanel .closeBtn{position:absolute;top:14px;right:14px;background:transparent;border:none;color:var(--muted);font-size:20px;cursor:pointer;}
+  /* --- shot check --- */
+  .shotBar{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+  .shotBar label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;}
+  .shotBar input[type=date]{background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 10px;font-size:13px;color-scheme:dark;}
+  .shotBar .spacer{flex:1;}
+  .shotInfo{font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6;}
+  .shotInfo b{color:var(--text);}
+  #shotTable td{vertical-align:middle;}
+  #shotTable tr.newImm td{border-top:2px solid #38bdf8;}
+  #shotTable input,#shotTable select{background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 6px;font-size:12px;width:100%;min-width:70px;}
+  #shotTable select.bad{background:#450a0a;border-color:#ef4444;color:#fecaca;}
+  #shotTable select.good{background:#14532d;border-color:#22c55e;color:#bbf7d0;}
+  .shotPrintHead{display:none;}
+  @media print{
+    body{background:#fff;color:#000;}
+    header,#dashboardView,#floorView,.shotBar,.shotNoPrint,#detailPanel{display:none!important;}
+    #shotView{display:block!important;}
+    #shotView main{padding:0;max-width:none;}
+    .shotPrintHead{display:block;margin-bottom:8px;}
+    .shotPrintHead h2{margin:0 0 4px;font-size:16px;}
+    .kpi,.panel{background:#fff;border-color:#999;color:#000;}
+    .kpi .value{color:#000!important;}
+    #shotTable th{background:#1f3864;color:#fff;position:static;}
+    #shotTable td,#shotTable th{border:1px solid #999;color:#000;white-space:normal;}
+    #shotTable input,#shotTable select{border:none;background:none;color:#000;padding:0;appearance:none;-webkit-appearance:none;}
+    .tablewrap{max-height:none;overflow:visible;}
+    @page{size:A4 landscape;margin:10mm;}
+  }
 </style>
 </head>
 <body>
@@ -156,7 +184,8 @@
     <div class="tabBar">
       <button class="tabBtn active" id="tabDash">📊 Dashboard</button>
       <button class="tabBtn" id="tabFloor">🏭 Floor Plan</button>
-      <button class="tabBtn" id="tabWarehouse" onclick="window.open('warehouse4.html', '_blank')">📦 Warehouse 4.0</button>
+      <button class="tabBtn" id="tabShots">🧪 Shot Check</button>
+      <button class="tabBtn" id="tabWarehouse" onclick="window.open('warehouse4.0.html', '_blank')">📦 Warehouse 4.0</button>
     </div>
     <select id="weekSelect"></select>
     <button class="primary" id="refreshBtn">⟳ Refresh</button>
@@ -268,6 +297,43 @@
 </main>
 </div>
 
+<div id="shotView" style="display:none;">
+<main>
+  <div class="banner" id="shotBanner" style="display:none;"></div>
+
+  <div class="shotBar">
+    <label>Production day <input type="date" id="shotDate"></label>
+    <span id="shotWeekLbl" style="font-size:12px;color:var(--muted);"></span>
+    <span class="spacer"></span>
+    <button class="ghost" id="shotCopy">⧉ Copy for Excel</button>
+    <button class="ghost" id="shotClear">Clear entries</button>
+    <button class="primary" id="shotPrint">🖨 Print</button>
+  </div>
+
+  <div class="shotPrintHead">
+    <h2>Daily shot storage checklist — Molding</h2>
+    <div id="shotPrintSub"></div>
+    <div style="margin-top:6px;">Quality (18:00): ______________________ &nbsp;&nbsp; S+1 controller (02:00): ______________________ &nbsp;&nbsp; Signature: ____________</div>
+  </div>
+
+  <div class="shotInfo shotNoPrint" id="shotInfo"></div>
+  <div class="kpis" id="shotKpis"></div>
+
+  <div class="panel">
+    <div class="tablewrap">
+      <table id="shotTable">
+        <thead><tr>
+          <th>#</th><th>IMM</th><th>Lear PN</th><th>Project</th><th>Mold ID</th><th>Status</th><th>Qty today</th>
+          <th>PO number</th><th>Shot stored 18:00</th><th>Label OK<br>(PN/IMM/PO/date)</th><th>S+1 02:00<br>in storage area</th><th>S+1 controller</th><th>Comment</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <p class="shotInfo shotNoPrint" style="margin-top:10px;">Entries are saved in this browser only (per device). Use <b>Copy for Excel</b> to paste the filled checklist into the shared log, or print it for the shift.</p>
+</main>
+</div>
+
 <div id="detailPanel">
   <button class="closeBtn" id="detailClose">✕</button>
   <div id="detailContent"></div>
@@ -277,7 +343,7 @@
 <script>
 /* ======================= CONFIG ======================= */
 const SHEET_ID = "1X22404pVovt1IVolZHzq0aQ5D2KbFzZAD0M-NUpvs3Q";
-const WEEK_TABS = ["Wk38", "Wk39", "Wk40", "Wk41"];
+const WEEK_TABS = ["Wk38", "Wk39"];
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
 
 // SHA-256 hash of the access password. Default password: lear2026 — CHANGE THIS.
@@ -535,6 +601,8 @@ async function loadAll(){
     renderAlerts(allAlerts);
     renderDebugPanel();
     renderFloor(weeksData[currentWeek].rows, allAlerts);
+    shotWeekCache = {}; moldIdsByWeek = {};
+    if(document.getElementById("shotView").style.display !== "none" && !document.querySelector("#shotTable")?.contains(document.activeElement)) renderShots();
     setStatus("Updated " + new Date().toLocaleTimeString(), "ok");
     document.getElementById("lastUpdated").textContent = "updated " + new Date().toLocaleTimeString();
     setConn(true);
@@ -891,11 +959,15 @@ function floorStatusClass(status){
 
 document.getElementById("tabDash").addEventListener("click", () => switchTab("dash"));
 document.getElementById("tabFloor").addEventListener("click", () => switchTab("floor"));
+document.getElementById("tabShots").addEventListener("click", () => switchTab("shots"));
 function switchTab(which){
   document.getElementById("tabDash").classList.toggle("active", which==="dash");
   document.getElementById("tabFloor").classList.toggle("active", which==="floor");
+  document.getElementById("tabShots").classList.toggle("active", which==="shots");
   document.getElementById("dashboardView").style.display = which==="dash" ? "block" : "none";
   document.getElementById("floorView").style.display = which==="floor" ? "block" : "none";
+  document.getElementById("shotView").style.display = which==="shots" ? "block" : "none";
+  if(which === "shots") renderShots();
 }
 
 function renderFloor(rows, alerts){
@@ -986,6 +1058,213 @@ document.getElementById("detailClose").addEventListener("click", () => {
   document.getElementById("detailPanel").classList.remove("open");
   document.querySelectorAll(".machine").forEach(el => el.classList.remove("selected"));
 });
+
+/* ======================================================================
+   SHOT CHECK VIEW — daily retained shot (18:00, Quality) + S+1 control (02:00)
+   Running PN = Molding IMM line with status Ongoing/OG, or qty planned that day > 0
+   ====================================================================== */
+const SHOT_DAYS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"];
+const SHOT_RETENTION_MONTHS = 6;
+let moldIdsByWeek = {};      // { week: { "PN - IMM": moldId } }
+
+function colLetter(idx){ let s=""; idx++; while(idx>0){ const m=(idx-1)%26; s=String.fromCharCode(65+m)+s; idx=Math.floor((idx-1)/26); } return s; }
+function isoWeek(d){
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - day);
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(),0,1));
+  return Math.ceil(((t - y0) / 86400000 + 1) / 7);
+}
+function ymd(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function dmy(d){ return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`; }
+function esc(s){ return String(s??"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+// Shot Check loads the week it needs on its own — it does not depend on WEEK_TABS.
+let shotWeekCache = {};      // { "Wk41": parsed week data from fetchWeek() }
+let shotWeekLoading = {};
+function getWeekData(name){ return weeksData[name] || shotWeekCache[name] || null; }
+async function ensureShotWeek(name){
+  if(getWeekData(name) || shotWeekLoading[name]) return;
+  shotWeekLoading[name] = true;
+  try{ shotWeekCache[name] = await fetchWeek(name); await loadMoldIds(name); }
+  catch(e){ shotWeekCache[name] = { error: e.message }; }
+  finally{ delete shotWeekLoading[name]; renderShots(); }
+}
+
+// Column U (Mold ID) holds raw numbers but some cells carry a date format, so the
+// normal CSV shows them as dates. Pull PN/IMM + Mold ID unformatted in a side query.
+async function loadMoldIds(w){
+  const data = getWeekData(w);
+  if(!data || data.error || moldIdsByWeek[w]) return;
+  const H = data.header.map(normHeader);
+  let moldIdx = H.findIndex(h => h.includes("mold id"));
+  if(moldIdx === -1){ const mat = H.findIndex(h => h.includes("material")); if(mat !== -1) moldIdx = mat - 5; }
+  if(moldIdx < 0 || data.colMap.pnImm < 0){ moldIdsByWeek[w] = {}; return; }
+  const tq = `select ${colLetter(data.colMap.pnImm)}, ${colLetter(moldIdx)} options no_format`;
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&headers=1&sheet=${encodeURIComponent(w)}&tq=${encodeURIComponent(tq)}&_=${Date.now()}`;
+  const map = {};
+  try{
+    const res = await fetch(url, {cache:"no-store"});
+    const text = await res.text();
+    if(!text.trim().startsWith("<")){
+      for(const [key, mold] of Papa.parse(text).data.slice(1)){
+        if(!key) continue;
+        let v = (mold ?? "").toString().trim();
+        if(/^-?\d+(\.0+)?(e\+?\d+)?$/i.test(v)) v = String(Math.round(Number(v)));
+        else if(/date\(|\d{1,4}[\/-]\d{1,2}[\/-]\d{1,4}/i.test(v) || /#value|#n\/a|#ref/i.test(v)) v = "";
+        map[key.trim()] = v;
+      }
+    }
+  }catch(e){ console.warn("Mold ID fetch failed for", w, e); }
+  moldIdsByWeek[w] = map;
+}
+
+function defaultShotDate(){
+  const d = new Date();
+  if(d.getHours() < 6) d.setDate(d.getDate() - 1);   // 02:00 control = previous production day
+  return d;
+}
+function shotDate(){
+  const v = document.getElementById("shotDate").value;
+  if(!v){ const d = defaultShotDate(); document.getElementById("shotDate").value = ymd(d); return d; }
+  const [y,m,dd] = v.split("-").map(Number);
+  return new Date(y, m-1, dd);
+}
+function shotStoreKey(d){ return "ci_shotcheck_" + ymd(d); }
+function loadShotEntries(d){ try{ return JSON.parse(localStorage.getItem(shotStoreKey(d)) || "{}"); }catch(e){ return {}; } }
+function saveShotEntries(d, obj){ try{ localStorage.setItem(shotStoreKey(d), JSON.stringify(obj)); }catch(e){} }
+
+function runningMoldingRows(d){
+  const wk = "Wk" + isoWeek(d);
+  const dayLabel = SHOT_DAYS[(d.getDay() + 6) % 7];
+  const data = getWeekData(wk);
+  if(!data){ ensureShotWeek(wk); return { weekName: wk, list: [], loading: true, dayLabel }; }
+  if(data.error) return { weekName: wk, list: [], error: data.error, dayLabel };
+  if(!moldIdsByWeek[wk]) loadMoldIds(wk).then(() => { if(!document.querySelector("#shotTable")?.contains(document.activeElement)) renderShots(); });
+  const molds = moldIdsByWeek[wk] || {};
+  const list = data.rows.filter(r => {
+    if(!/^molding/i.test(r.area) || !/^imm/i.test(r.machine)) return false;
+    const s = (r.status || "").toLowerCase();
+    const qty = r.days[dayLabel] || 0;
+    return s.includes("ongoing") || s.startsWith("og") || qty > 0;
+  }).map(r => ({
+    key: r.pn,
+    imm: r.machine,
+    leaPn: r.pn.split(" - ")[0].trim(),
+    project: r.project,
+    mold: molds[r.pn] || "",
+    status: r.status,
+    qty: r.days[dayLabel] || null,
+  })).sort((a,b) => a.imm.localeCompare(b.imm, undefined, {numeric:true}));
+  return { weekName: wk, list, dayLabel };
+}
+
+const SHOT_FIELDS = [
+  { k:"po",      type:"text",   ph:"PO…" },
+  { k:"stored",  type:"select", opts:["","Y","N","No prod"], bad:["N"], good:["Y"] },
+  { k:"label",   type:"select", opts:["","OK","NOK"], bad:["NOK"], good:["OK"] },
+  { k:"s1",      type:"select", opts:["","OK","NOK","Missing"], bad:["NOK","Missing"], good:["OK"] },
+  { k:"ctrl",    type:"text",   ph:"Name" },
+  { k:"comment", type:"text",   ph:"" },
+];
+
+function renderShots(){
+  const d = shotDate();
+  const { weekName, list, loading, error, dayLabel } = runningMoldingRows(d);
+  const entries = loadShotEntries(d);
+  const next = new Date(d); next.setDate(next.getDate() + 1);
+  const scrap = new Date(d); scrap.setMonth(scrap.getMonth() + SHOT_RETENTION_MONTHS);
+
+  document.getElementById("shotWeekLbl").textContent = `${dayLabel || ""} · ${weekName}`;
+  const banner = document.getElementById("shotBanner");
+  if(loading){ banner.style.display = "block"; banner.textContent = `Loading ${weekName} from the attainment file…`; }
+  else if(error){ banner.style.display = "block"; banner.textContent = `Couldn't load sheet "${weekName}": ${error}. Check that the tab exists with exactly this name.`; }
+  else banner.style.display = "none";
+
+  const info = `Shot taken <b>18:00 ${dmy(d)}</b> by Quality · S+1 control <b>02:00 ${dmy(next)}</b> · keep until <b>${dmy(scrap)}</b>, then scrap.`;
+  document.getElementById("shotInfo").innerHTML = info;
+  document.getElementById("shotPrintSub").innerHTML = `Production day ${dmy(d)} (${weekName}) · ${info}`;
+
+  let prevImm = "";
+  document.querySelector("#shotTable tbody").innerHTML = list.map((r, i) => {
+    const e = entries[r.key] || {};
+    const cells = SHOT_FIELDS.map(f => {
+      const val = e[f.k] || "";
+      if(f.type === "select"){
+        const cls = f.bad.includes(val) ? "bad" : f.good.includes(val) ? "good" : "";
+        return `<td><select class="${cls}" id="sc_${i}_${f.k}" data-key="${esc(r.key)}" data-f="${f.k}">${f.opts.map(o => `<option${o===val?" selected":""}>${o}</option>`).join("")}</select></td>`;
+      }
+      return `<td><input type="text" id="sc_${i}_${f.k}" data-key="${esc(r.key)}" data-f="${f.k}" value="${esc(val)}" placeholder="${f.ph}"></td>`;
+    }).join("");
+    const newImm = r.imm !== prevImm && i > 0 ? ' class="newImm"' : "";
+    prevImm = r.imm;
+    return `<tr${newImm}><td>${i+1}</td><td><b>${esc(r.imm)}</b></td><td>${esc(r.leaPn)}</td><td>${esc(r.project)}</td><td>${esc(r.mold) || "—"}</td>
+      <td><span class="badge ${statusClass(r.status)}">${esc(r.status)}</span></td><td>${r.qty ?? ""}</td>${cells}</tr>`;
+  }).join("") || `<tr><td colspan="13" style="color:var(--muted)">${loading ? "Loading…" : error ? "No data." : "No running molding PN found for " + dmy(d) + "."}</td></tr>`;
+
+  renderShotKpis(list, entries);
+}
+
+function renderShotKpis(list, entries){
+  const vals = list.map(r => entries[r.key] || {});
+  const stored = vals.filter(e => e.stored === "Y").length;
+  const noProd = vals.filter(e => e.stored === "No prod").length;
+  const expected = list.length - noProd;
+  const missing = vals.filter(e => e.stored === "N").length;
+  const s1Nok = vals.filter(e => e.s1 === "NOK" || e.s1 === "Missing" || e.label === "NOK").length;
+  const s1Done = vals.filter(e => e.s1).length;
+  document.getElementById("shotKpis").innerHTML = [
+    ["Running PNs", list.length, ""],
+    ["Shots stored", `${stored} / ${expected}`, stored === expected && expected > 0 ? "good" : stored ? "warn" : ""],
+    ["Not stored", missing, missing ? "bad" : "good"],
+    ["S+1 checked", `${s1Done} / ${expected}`, s1Done >= expected && expected > 0 ? "good" : ""],
+    ["S+1 NOK / missing", s1Nok, s1Nok ? "bad" : "good"],
+  ].map(([label,value,cls]) => `<div class="kpi"><div class="label">${label}</div><div class="value ${cls}">${value}</div></div>`).join("");
+}
+
+document.querySelector("#shotTable tbody").addEventListener("change", onShotEdit);
+document.querySelector("#shotTable tbody").addEventListener("input", e => { if(e.target.tagName === "INPUT") onShotEdit(e); });
+function onShotEdit(e){
+  const el = e.target;
+  if(!el.dataset || !el.dataset.key) return;
+  const d = shotDate();
+  const entries = loadShotEntries(d);
+  entries[el.dataset.key] = entries[el.dataset.key] || {};
+  entries[el.dataset.key][el.dataset.f] = el.value;
+  saveShotEntries(d, entries);
+  if(el.tagName === "SELECT"){
+    const f = SHOT_FIELDS.find(x => x.k === el.dataset.f);
+    el.className = f.bad.includes(el.value) ? "bad" : f.good.includes(el.value) ? "good" : "";
+  }
+  renderShotKpis(runningMoldingRows(d).list, entries);
+}
+
+document.getElementById("shotDate").addEventListener("change", renderShots);
+document.getElementById("shotPrint").addEventListener("click", () => window.print());
+document.getElementById("shotClear").addEventListener("click", () => {
+  const d = shotDate();
+  if(!confirm(`Clear all entries for ${dmy(d)} on this device?`)) return;
+  try{ localStorage.removeItem(shotStoreKey(d)); }catch(e){}
+  renderShots();
+});
+document.getElementById("shotCopy").addEventListener("click", async () => {
+  const d = shotDate();
+  const { weekName, list } = runningMoldingRows(d);
+  const entries = loadShotEntries(d);
+  const head = ["Date","Week","IMM","Lear PN","Project","Mold ID","Status","Qty today","PO number","Shot stored","Label OK","S+1 in storage","S+1 controller","Comment"];
+  const lines = [head.join("\t")].concat(list.map(r => {
+    const e = entries[r.key] || {};
+    return [dmy(d), weekName, r.imm, r.leaPn, r.project, r.mold, r.status, r.qty ?? "", e.po||"", e.stored||"", e.label||"", e.s1||"", e.ctrl||"", e.comment||""]
+      .map(v => String(v).replace(/[\t\n]/g," ")).join("\t");
+  }));
+  const text = lines.join("\n");
+  try{ await navigator.clipboard.writeText(text); setStatus(`Copied ${list.length} lines — paste in Excel`, "ok"); }
+  catch(err){
+    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); setStatus(`Copied ${list.length} lines — paste in Excel`, "ok"); }catch(e){ setStatus("Copy failed", "err"); }
+    ta.remove();
+  }
+});
+document.getElementById("shotDate").value = ymd(defaultShotDate());
 
 </script>
 </body>
